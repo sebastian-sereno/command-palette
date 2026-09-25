@@ -2,10 +2,10 @@ import {
   type CommandHistoryEntry,
   type CommandHistoryOptions,
   DEFAULT_HISTORY_OPTIONS,
-} from './history';
-import type { CommandProxy } from './proxy';
-import type { CommandRegistry } from './registry';
-import type { CommandSearch, CommandSearchOptions, CommandSearchResult } from './search';
+} from './history.js';
+import type { CommandProxy } from './proxy.js';
+import type { CommandRegistry } from './registry.js';
+import type { CommandSearch, CommandSearchOptions, CommandSearchResult } from './search.js';
 
 export type CommandExecutionResult<T = unknown> = {
   success: boolean;

@@ -1,4 +1,4 @@
-import type { CommandProxy } from './proxy';
+import type { CommandProxy } from './proxy.js';
 
 export type CommandHistoryEntry<TContext = unknown> = {
   readonly id: string;

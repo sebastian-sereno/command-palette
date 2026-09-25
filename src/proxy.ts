@@ -1,4 +1,4 @@
-import type { Command } from './command';
+import type { Command } from './command.js';
 
 export type CommandProxy<TContext = unknown, TExtensions extends object = {}> = DeepReadonly<
   Command<TContext> & TExtensions

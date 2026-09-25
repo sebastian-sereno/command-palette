@@ -1,5 +1,5 @@
-import type { Command } from './command';
-import type { CommandList, CommandProxy } from './proxy';
+import type { Command } from './command.js';
+import type { CommandList, CommandProxy } from './proxy.js';
 
 export class CommandRegistry {
   private readonly commands = new Map<string, Command>();

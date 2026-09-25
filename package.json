@@ -1,23 +1,5 @@
 {
-  "name": "command-palette",
-  "version": "1.0.0",
-  "main": "src/index.ts",
   "author": "Sebastian Sereno",
-  "license": "All Rights Reserved",
-  "private": true,
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.0",
-    "@commitlint/cli": "^21.0.2",
-    "@commitlint/config-conventional": "^21.0.2",
-    "@types/node": "^26.6.2",
-    "lefthook": "^2.1.14",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.1",
-    "vitest": "^5.0.2",
-    "commitlint": "^21.2.1",
-    "cz-conventional-changelog": "^3.3.0"
-  },
   "commitlint": {
     "extends": [
       "@commitlint/config-conventional"
@@ -42,10 +24,42 @@
       "path": "./node_modules/cz-conventional-changelog"
     }
   },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
+    "@types/node": "^26.6.2",
+    "commitlint": "^21.2.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "lefthook": "^2.1.14",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "All Rights Reserved",
+  "main": "./dist/index.js",
+  "name": "command-palette",
   "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "test": "vitest run",
-    "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
-  }
+  },
+  "type": "module",
+  "types": "./dist/index.d.js",
+  "version": "1.0.0"
 }

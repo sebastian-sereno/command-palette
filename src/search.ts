@@ -1,4 +1,4 @@
-import type { CommandProxy } from './proxy';
+import type { CommandProxy } from './proxy.js';
 
 export type CommandSearch<TContext = unknown> = {
   query(query?: string, options?: CommandSearchOptions): CommandSearchResult<TContext>[];
