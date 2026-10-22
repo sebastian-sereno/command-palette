@@ -8,7 +8,6 @@ export class CommandRegistry {
   // Validate command definitions when registering them
   registerCommand(command: Command): void {
     this.validateCommand(command);
-
     if (this.commands.has(command.id))
       throw new Error(`Command with ID "${command.id}" is already registered.`);
 
@@ -17,11 +16,7 @@ export class CommandRegistry {
 
   unregisterCommand(commandOrId: Command | string): boolean {
     const id = typeof commandOrId === 'string' ? commandOrId : commandOrId?.id;
-
-    if (!id) {
-      return false;
-    }
-
+    if (!id) return false;
     return this.commands.delete(id);
   }
 
