@@ -89,4 +89,10 @@ describe('Command search', () => {
     const command = executor.search.query('clipboard').at(0)?.command;
     expect(command?.id).toBe('copy');
   });
+
+  it('supports chained searches', () => {
+    const executor = createExecutor();
+    const command = executor.search.clipboard.results().at(0)?.command;
+    expect(command?.id).toBe('copy');
+  });
 });

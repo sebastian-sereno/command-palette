@@ -5,7 +5,12 @@ import {
 } from './history.js';
 import type { CommandProxy } from './proxy.js';
 import type { CommandRegistry } from './registry.js';
-import type { CommandSearch, CommandSearchOptions, CommandSearchResult } from './search.js';
+import type {
+  CommandSearch,
+  CommandSearchFunctions,
+  CommandSearchOptions,
+  CommandSearchResult,
+} from './search.js';
 
 export type CommandExecutionResult<T = unknown> = {
   success: boolean;
@@ -199,7 +204,7 @@ export class CommandExecutor {
     const executor = this;
     const queryString = queryParts.join(' ');
 
-    const target: CommandSearch = {
+    const target: CommandSearchFunctions = {
       find: () => {
         return executor.searchCommands(queryString, { limit: 1 })[0]?.command;
       },
@@ -207,10 +212,6 @@ export class CommandExecutor {
       query: (additionalQuery = '', options) => {
         const parts = [...queryParts, ...executor.tokenize(additionalQuery)];
         return executor.searchCommands(parts.join(' '), options);
-      },
-
-      get queryString() {
-        return queryString;
       },
 
       results: (options) => {
@@ -223,7 +224,6 @@ export class CommandExecutor {
     // search.query(...)
     // search.find()
     // search.results()
-    // search.queryString
 
     // Chained search:
     //
@@ -240,7 +240,7 @@ export class CommandExecutor {
         }
         return Reflect.get(target, property, receiver);
       },
-    });
+    }) as CommandSearch;
   }
 
   private scoreCommand(
@@ -258,11 +258,19 @@ export class CommandExecutor {
     const title = command.title.toLowerCase();
     const description = command.description.toLowerCase();
 
+    const queryReg = new RegExp(
+      `^${query.replaceAll(/(?=[+?|(){}[\].])/g, '\\').replaceAll(/(?=\*)/g, '.')}$`,
+      'gi',
+    );
+
     /*
      * Exact ID match gets the highest score.
      */
     if (id === query) {
       score += 100;
+      matches.push('id');
+    } else if (queryReg.test(id)) {
+      score += 900;
       matches.push('id');
     } else if (id.includes(query)) {
       score += 60;
@@ -275,6 +283,9 @@ export class CommandExecutor {
     if (title === query) {
       score += 90;
       matches.push('title');
+    } else if (queryReg.test(title)) {
+      score += 80;
+      matches.push('id');
     } else if (title.includes(query)) {
       score += 50;
       matches.push('title');
@@ -323,17 +334,9 @@ export class CommandExecutor {
      * useful behavior.
      */
     for (const token of tokens) {
-      if (title.includes(token)) {
-        score += 15;
-      }
-
-      if (description.includes(token)) {
-        score += 5;
-      }
-
-      if (command.keywords.some((keyword) => keyword.toLowerCase().includes(token))) {
-        score += 10;
-      }
+      if (title.includes(token)) score += 15;
+      if (description.includes(token)) score += 5;
+      if (command.keywords.some((keyword) => keyword.toLowerCase().includes(token))) score += 10;
     }
 
     return { matches: [...new Set(matches)], score };
