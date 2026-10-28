@@ -1,4 +1,4 @@
-name: Sync Main to Development
+name: Reset Development to Main
 
 on:
   pull_request:
@@ -13,12 +13,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: sync-main-to-development
+  group: reset-development-to-main
   cancel-in-progress: false
 
 jobs:
-  sync:
-    name: Sync main into development
+  reset-development:
+    name: Reset development to main
     if: >-
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.merged == true
@@ -26,10 +26,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout development
+      - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: development
           fetch-depth: 0
 
       - name: Configure Git
@@ -38,28 +37,13 @@ jobs:
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge main into development
-        shell: bash
+      - name: Reset development to main
         run: |
           set -euo pipefail
 
           git fetch origin main development
-          git checkout development
-          git reset --hard origin/development
 
-          if git merge-base --is-ancestor origin/main HEAD; then
-            echo "Development already contains main."
-            exit 0
-          fi
+          git checkout -B development origin/main
 
-          if ! git merge \
-            --no-ff \
-            --no-edit \
-            -m "chore(sync): merge main into development" \
-            origin/main; then
-            git merge --abort
-            echo "::error::Merge conflict syncing main into development."
-            exit 1
-          fi
-
-          git push origin HEAD:development
+          git push --force-with-lease \
+            origin development:development
