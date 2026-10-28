@@ -50,7 +50,7 @@ describe('CommandProxy', () => {
     const registry = new CommandRegistry();
     registry.registerCommand({ ...createCommand(), execute: () => 'executed' });
 
-    const command = registry.getCommandByID('test')!;
+    const command = registry.getCommandByID('test', true)!;
     expect(command.execute({})).toBe('executed');
   });
 });

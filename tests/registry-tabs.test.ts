@@ -1,0 +1,316 @@
+import { describe, expect, it } from 'vitest';
+
+import type { Command, CommandNode, CommandTab } from '../src/command';
+import { CommandRegistry } from '../src/registry';
+
+function createCommand(overrides: Partial<Command> = {}): Command {
+  return {
+    category: ['testing'],
+    description: 'A test command',
+    execute: () => 'executed',
+    id: 'test',
+    keywords: ['test'],
+    shortcut: 'Ctrl+T',
+    title: 'Test Command',
+    ...overrides,
+  };
+}
+
+function createTab(overrides: Partial<CommandTab> = {}): CommandTab {
+  return {
+    category: ['testing'],
+    children: new Map<string, CommandNode>(),
+    description: 'A test tab',
+    id: 'tab',
+    keywords: ['tab'],
+    title: 'Test Tab',
+    ...overrides,
+  };
+}
+
+describe('CommandRegistry tabs', () => {
+  describe('registration', () => {
+    it('registers a tab', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'file' }));
+
+      expect(registry.getCommandByID('file')?.id).toBe('file');
+      expect(registry.getAllCommands().map((node) => node.id)).toEqual(['file']);
+    });
+
+    it('prevents duplicate root IDs across commands and tabs', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommand(createCommand({ id: 'file' }));
+
+      expect(() => {
+        registry.registerCommandTab(createTab({ id: 'file' }));
+      }).toThrow();
+    });
+
+    it('registers a subcommand under a tab', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+
+      expect(registry.getSubcommands(['file']).map((node) => node.id)).toEqual(['open']);
+    });
+
+    it('rejects registration under a missing parent', () => {
+      const registry = new CommandRegistry();
+
+      expect(() => {
+        registry.registerSubcommand(['missing'], createCommand({ id: 'open' }));
+      }).toThrow();
+    });
+
+    it('rejects registration under an executable command', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommand(createCommand({ id: 'file' }));
+
+      expect(() => {
+        registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+      }).toThrow();
+    });
+
+    it('prevents duplicate sibling IDs', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+
+      expect(() => {
+        registry.registerSubcommand(['file'], createCommand({ id: 'open', title: 'Open Again' }));
+      }).toThrow();
+    });
+
+    it('allows identical child IDs under different parents', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerCommandTab(createTab({ id: 'project' }));
+
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+
+      registry.registerSubcommand(
+        ['project'],
+        createCommand({ id: 'open', title: 'Open Project' }),
+      );
+
+      expect(registry.getCommandByPath(['file', 'open'])?.title).toBe('Test Command');
+      expect(registry.getCommandByPath(['project', 'open'])?.title).toBe('Open Project');
+    });
+  });
+
+  describe('nested tabs', () => {
+    it('supports multiple levels of nesting', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'git' }));
+      registry.registerSubcommand(['git'], createTab({ id: 'remote' }));
+      registry.registerSubcommand(['git', 'remote'], createTab({ id: 'origin' }));
+      registry.registerSubcommand(['git', 'remote', 'origin'], createCommand({ id: 'fetch' }));
+
+      expect(registry.getCommandByPath(['git', 'remote', 'origin', 'fetch'])?.id).toBe('fetch');
+    });
+
+    it('returns undefined for invalid paths', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'git' }));
+
+      expect(registry.getCommandByPath(['git', 'missing'])).toBeUndefined();
+      expect(registry.getCommandByPath(['missing'])).toBeUndefined();
+    });
+
+    it('returns only direct children', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'git' }));
+      registry.registerSubcommand(['git'], createTab({ id: 'remote' }));
+      registry.registerSubcommand(['git', 'remote'], createCommand({ id: 'add' }));
+
+      expect(registry.getSubcommands(['git']).map((node) => node.id)).toEqual(['remote']);
+    });
+
+    it('supports an empty tab', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'empty' }));
+
+      expect(registry.getSubcommands(['empty'])).toHaveLength(0);
+    });
+  });
+
+  describe('reusing commands', () => {
+    it('allows the same command definition under multiple parents', () => {
+      const registry = new CommandRegistry();
+      const sharedCommand = createCommand({ id: 'open' });
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerCommandTab(createTab({ id: 'project' }));
+
+      registry.registerSubcommand(['file'], sharedCommand);
+      registry.registerSubcommand(['project'], sharedCommand);
+
+      expect(registry.getCommandByPath(['file', 'open'])?.id).toBe('open');
+      expect(registry.getCommandByPath(['project', 'open'])?.id).toBe('open');
+    });
+
+    it('allows reused definitions to have different sibling commands', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerCommandTab(createTab({ id: 'project' }));
+
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'close' }));
+
+      registry.registerSubcommand(['project'], createCommand({ id: 'open' }));
+
+      expect(registry.getSubcommands(['file']).map((node) => node.id)).toEqual(['open', 'close']);
+      expect(registry.getSubcommands(['project']).map((node) => node.id)).toEqual(['open']);
+    });
+  });
+
+  describe('navigation', () => {
+    it('starts at the root', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerCommand(createCommand({ id: 'help' }));
+
+      expect(registry.isAtRoot()).toBe(true);
+      expect(registry.getCurrentCommands().map((node) => node.id)).toEqual(['file', 'help']);
+    });
+
+    it('enters a tab and shows its children', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+
+      expect(registry.enterCommand('file')).toBe(true);
+      expect(registry.isAtRoot()).toBe(false);
+
+      expect(registry.getCurrentCommands().map((node) => node.id)).toEqual(['open']);
+    });
+
+    it('does not enter an executable command', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommand(createCommand({ id: 'help' }));
+
+      expect(registry.enterCommand('help')).toBe(false);
+      expect(registry.isAtRoot()).toBe(true);
+    });
+
+    it('returns to the parent with goBack', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createTab({ id: 'recent' }));
+      registry.registerSubcommand(['file', 'recent'], createCommand({ id: 'open' }));
+
+      expect(registry.enterCommand('file')).toBe(true);
+      expect(registry.enterCommand('recent')).toBe(true);
+
+      expect(registry.goBack()).toBe(true);
+      expect(registry.getCurrentCommands().map((node) => node.id)).toEqual(['recent']);
+    });
+
+    it('returns directly to the root', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createTab({ id: 'recent' }));
+
+      registry.enterCommand('file');
+      registry.enterCommand('recent');
+      registry.goToRoot();
+
+      expect(registry.isAtRoot()).toBe(true);
+      expect(registry.getCurrentCommands().map((node) => node.id)).toEqual(['file']);
+    });
+
+    it('cannot go back beyond the root', () => {
+      const registry = new CommandRegistry();
+
+      expect(registry.goBack()).toBe(false);
+      expect(registry.isAtRoot()).toBe(true);
+    });
+
+    it('does not enter a missing command', () => {
+      const registry = new CommandRegistry();
+
+      expect(registry.enterCommand('missing')).toBe(false);
+    });
+  });
+
+  describe('unregistration', () => {
+    it('removes a tab and its nested subtree', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createTab({ id: 'recent' }));
+      registry.registerSubcommand(['file', 'recent'], createCommand({ id: 'open' }));
+
+      expect(registry.unregisterCommand('file')).toBe(true);
+      expect(registry.getCommandByID('file')).toBeUndefined();
+      expect(registry.getCommandByPath(['file', 'recent', 'open'])).toBeUndefined();
+    });
+
+    it('removes a nested subcommand without affecting siblings', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'close' }));
+
+      expect(registry.unregisterSubcommand(['file'], 'open')).toBe(true);
+      expect(registry.getSubcommands(['file']).map((node) => node.id)).toEqual(['close']);
+    });
+
+    it('returns false when removing a missing child', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'file' }));
+
+      expect(registry.unregisterSubcommand(['file'], 'missing')).toBe(false);
+    });
+  });
+
+  describe('read-only proxies', () => {
+    it('prevents modifying a tab proxy', () => {
+      const registry = new CommandRegistry();
+      registry.registerCommandTab(createTab({ id: 'file' }));
+
+      const tab = registry.getCommandByID('file')!;
+
+      expect(() => {
+        (tab as any).title = 'Modified';
+      }).toThrow('CommandProxy is read-only.');
+    });
+
+    it('prevents modifying nested command proxies', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+
+      const child = registry.getSubcommands(['file'])[0]!;
+
+      expect(() => {
+        (child as any).title = 'Modified';
+      }).toThrow('CommandProxy is read-only.');
+    });
+
+    it('supports array methods on child lists', () => {
+      const registry = new CommandRegistry();
+
+      registry.registerCommandTab(createTab({ id: 'file' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'open' }));
+      registry.registerSubcommand(['file'], createCommand({ id: 'close' }));
+
+      const children = registry.getSubcommands(['file']);
+
+      expect(children.map((node) => node.id)).toEqual(['open', 'close']);
+      expect(children.find((node) => node.id === 'close')?.id).toBe('close');
+      expect(children.filter((node) => node.id === 'open')).toHaveLength(1);
+    });
+  });
+});

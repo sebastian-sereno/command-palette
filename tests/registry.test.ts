@@ -32,7 +32,7 @@ describe('CommandRegistry', () => {
 
     expect(() => {
       registry.registerCommand(createCommand({ id: 'duplicate' }));
-    }).toThrow('Command with ID "duplicate" is already registered.');
+    }).toThrow('Command "duplicate" is already registered.');
   });
 
   it('unregisters by ID', () => {

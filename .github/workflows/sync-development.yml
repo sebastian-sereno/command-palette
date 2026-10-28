@@ -1,0 +1,55 @@
+name: Sync Main to Development
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-main-to-development
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync main into development
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.merged == true
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout development
+        uses: actions/checkout@v5
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge main into development
+        run: |
+          set -euo pipefail
+
+          git fetch origin main development
+          git checkout development
+          git reset --hard origin/development
+
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "Development is already up to date."
+            exit 0
+          fi
+
+          git merge --no-edit origin/main
+          git push origin HEAD:development

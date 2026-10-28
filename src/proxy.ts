@@ -1,13 +1,8 @@
-import type { Command } from './command.js';
+import type { Command, CommandNode } from './command.js';
 
-export type CommandProxy<TContext = unknown, TExtensions extends object = {}> = DeepReadonly<
-  Command<TContext> & TExtensions
->;
-
-export type CommandList<
-  TContext = unknown,
-  TExtensions extends object = {},
-> = readonly CommandProxy<TContext, TExtensions>[];
+export type CommandNodeProxy = DeepReadonly<CommandNode>;
+export type CommandProxy = DeepReadonly<Command>;
+export type CommandList = readonly CommandNodeProxy[];
 
 type DeepReadonly<T> = T extends (...args: infer Args) => infer Return
   ? (...args: Args) => Return
