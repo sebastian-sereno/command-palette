@@ -39,6 +39,7 @@ jobs:
             "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Merge main into development
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -47,9 +48,18 @@ jobs:
           git reset --hard origin/development
 
           if git merge-base --is-ancestor origin/main HEAD; then
-            echo "Development is already up to date."
+            echo "Development already contains main."
             exit 0
           fi
 
-          git merge --no-edit origin/main
+          if ! git merge \
+            --no-ff \
+            --no-edit \
+            -m "chore(sync): merge main into development" \
+            origin/main; then
+            git merge --abort
+            echo "::error::Merge conflict syncing main into development."
+            exit 1
+          fi
+
           git push origin HEAD:development
