@@ -1,9 +1,10 @@
+import { type CommandNode, isCommandTab } from './command.js';
 import {
   type CommandHistoryEntry,
   type CommandHistoryOptions,
   DEFAULT_HISTORY_OPTIONS,
 } from './history.js';
-import type { CommandProxy } from './proxy.js';
+import type { CommandNodeProxy } from './proxy.js';
 import type { CommandRegistry } from './registry.js';
 import type {
   CommandSearch,
@@ -52,93 +53,121 @@ export class CommandExecutor {
   /**
    * Execute a command by ID.
    */
+
   async execute<TContext = unknown, T = unknown>(
     id: string,
+    context: TContext,
+    signal?: AbortSignal,
+  ): Promise<CommandExecutionResult<T>> {
+    const node = this.registry.getCommandByID(id);
+
+    if (!node) {
+      return {
+        commandId: id,
+        duration: 0,
+        error: new Error(`Command "${id}" was not found.`),
+        success: false,
+      };
+    }
+
+    if (isCommandTab(node as CommandNode)) {
+      return {
+        commandId: id,
+        duration: 0,
+        error: new Error(`Cannot execute "${id}": it contains subcommands.`),
+        success: false,
+      };
+    }
+
+    return this.executeResolved(id, node, context, signal);
+  }
+
+  private async executeResolved<TContext, T = unknown>(
+    id: string,
+    command: CommandNodeProxy,
     context: TContext,
     signal?: AbortSignal,
   ): Promise<CommandExecutionResult<T>> {
     const startedAt = new Date();
     const start = performance.now();
 
-    const command = this.registry.getCommandByID(id);
-
-    if (!command) {
-      const result: CommandExecutionResult<T> = {
-        commandId: id,
-        duration: performance.now() - start,
-        error: new Error(`Command "${id}" was not found.`),
-        success: false,
-      };
-
-      return result;
-    }
-
-    if (signal?.aborted) {
-      const result: CommandExecutionResult<T> = {
-        cancelled: true,
-        commandId: id,
-        duration: performance.now() - start,
-        error: new DOMException('Command execution was cancelled.', 'AbortError'),
-        success: false,
-      };
-
+    const finish = (
+      result: CommandExecutionResult<T>,
+      error?: unknown,
+    ): CommandExecutionResult<T> => {
       this.recordHistory({
-        cancelled: true,
+        cancelled: result.cancelled ?? false,
         command,
         completedAt: new Date(),
         context: this.historyOptions.includeContext ? context : undefined,
         duration: result.duration,
+        ...(error !== undefined ? { error } : {}),
         id,
         startedAt,
-        success: false,
+        success: result.success,
       });
 
       return result;
+    };
+
+    if (signal?.aborted) {
+      const error = new DOMException('Command execution was cancelled.', 'AbortError');
+
+      return finish(
+        {
+          cancelled: true,
+          commandId: id,
+          duration: performance.now() - start,
+          error,
+          success: false,
+        },
+        error,
+      );
     }
 
     try {
-      const value = (await command.execute(context)) as T;
+      const commandNode = command as CommandNode;
+      if (isCommandTab(commandNode))
+        throw new Error(`Cannot execute "${id}": it contains subcommands.`);
 
-      const result: CommandExecutionResult<T> = {
+      const value = (await commandNode.execute(context)) as T;
+
+      // Report cancellation if it happened during execution.
+      // Note: this does not stop the underlying operation.
+      if (signal?.aborted) {
+        const error = new DOMException('Command execution was cancelled.', 'AbortError');
+
+        return finish(
+          {
+            cancelled: true,
+            commandId: id,
+            duration: performance.now() - start,
+            error,
+            success: false,
+          },
+          error,
+        );
+      }
+
+      return finish({
         commandId: id,
         duration: performance.now() - start,
         success: true,
         value,
-      };
-
-      this.recordHistory({
-        cancelled: false,
-        command,
-        completedAt: new Date(),
-        context: this.historyOptions.includeContext ? context : undefined,
-        duration: result.duration,
-        id,
-        startedAt,
-        success: true,
       });
-
-      return result;
     } catch (error) {
-      const result: CommandExecutionResult<T> = {
-        commandId: id,
-        duration: performance.now() - start,
-        error,
-        success: false,
-      };
+      const cancelled = signal?.aborted || (error instanceof Error && error.name === 'AbortError');
 
-      this.recordHistory({
-        cancelled: false,
-        command,
-        completedAt: new Date(),
-        context: this.historyOptions.includeContext ? context : undefined,
-        duration: result.duration,
+      return finish(
+        {
+          cancelled,
+          commandId: id,
+          duration: performance.now() - start,
+          error,
+          success: false,
+        },
         error,
-        id,
-        startedAt,
-        success: false,
-      });
-
-      return result;
+      );
     }
   }
 
@@ -146,11 +175,20 @@ export class CommandExecutor {
    * Execute a command returned from the search system.
    */
   async executeCommand<TContext = unknown, T = unknown>(
-    command: CommandProxy<TContext>,
+    command: CommandNodeProxy,
     context: TContext,
     signal?: AbortSignal,
   ): Promise<CommandExecutionResult<T>> {
-    return this.execute(command.id, context, signal);
+    if (isCommandTab(command as CommandNode)) {
+      return {
+        commandId: command.id,
+        duration: 0,
+        error: new Error(`Cannot execute "${command.id}": it contains subcommands.`),
+        success: false,
+      };
+    }
+
+    return this.executeResolved(command.id, command, context, signal);
   }
 
   get history() {
@@ -244,7 +282,7 @@ export class CommandExecutor {
   }
 
   private scoreCommand(
-    command: CommandProxy,
+    command: CommandNodeProxy,
     query: string,
     tokens: string[],
   ): {
@@ -270,7 +308,7 @@ export class CommandExecutor {
       score += 100;
       matches.push('id');
     } else if (queryReg.test(id)) {
-      score += 900;
+      score += 90;
       matches.push('id');
     } else if (id.includes(query)) {
       score += 60;

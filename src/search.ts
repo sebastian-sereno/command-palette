@@ -1,16 +1,16 @@
-import type { CommandProxy } from './proxy.js';
+import type { CommandNodeProxy } from './proxy.js';
 
-export type CommandSearchFunctions<TContext = unknown> = {
-  query(query?: string, options?: CommandSearchOptions): CommandSearchResult<TContext>[];
-  find(): CommandProxy<TContext> | undefined;
-  results(options?: CommandSearchOptions): CommandSearchResult<TContext>[];
+export type CommandSearchFunctions = {
+  query(query?: string, options?: CommandSearchOptions): CommandSearchResult[];
+  find(): CommandNodeProxy | undefined;
+  results(options?: CommandSearchOptions): CommandSearchResult[];
 };
-export type CommandSearch<TContext = unknown> = CommandSearchFunctions<TContext> & {
-  [key: string]: CommandSearch<TContext>;
+export type CommandSearch = CommandSearchFunctions & {
+  [key: string]: CommandSearch;
 };
 
-export type CommandSearchResult<TContext = unknown> = {
-  command: CommandProxy<TContext>;
+export type CommandSearchResult = {
+  command: CommandNodeProxy;
   score: number;
   matches: string[];
 };
