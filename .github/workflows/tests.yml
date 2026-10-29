@@ -4,12 +4,13 @@ on:
   push:
   pull_request:
 
+permissions:
+  pull-requests: read
+  contents: read
+
 jobs:
   changes:
     runs-on: ubuntu-latest
-
-    permissions:
-      pull-requests: read
 
     outputs:
       code: ${{ steps.filter.outputs.code }}
