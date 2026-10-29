@@ -64,5 +64,5 @@
   },
   "type": "module",
   "types": "./dist/index.d.js",
-  "version": "1.0.4-dev.1"
+  "version": "1.0.4-dev.2"
 }
