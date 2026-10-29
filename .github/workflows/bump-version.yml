@@ -44,6 +44,7 @@ jobs:
           COMMITS=$(git rev-list "$BEFORE..$AFTER")
 
           CODE_CHANGE=false
+          CONVENTIONAL_COMMIT_REGEX='^(feat|fix|perf|refactor)(\([^)]*\))?(!)?:'
 
           while IFS= read -r COMMIT; do
             [[ -z "$COMMIT" ]] && continue
@@ -51,7 +52,7 @@ jobs:
             MESSAGE=$(git log -1 --format=%s "$COMMIT")
 
             # Only conventional commits that may affect code.
-            if ! [[ "$MESSAGE" =~ ^(feat|fix|perf|refactor)(\([^)]*\))?(!)?: ]]; then
+            if ! [[ "$MESSAGE" =~ $CONVENTIONAL_COMMIT_REGEX ]]; then
               echo "Ignoring commit: $MESSAGE"
               continue
             fi
@@ -70,7 +71,6 @@ jobs:
                   continue
                   ;;
                 package.json|package-lock.json)
-                  # Version and dependency metadata alone do not count.
                   continue
                   ;;
                 *)
