@@ -17,9 +17,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.before }}
           filters: |
             code:
               - 'src/**'
