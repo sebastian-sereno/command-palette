@@ -5,7 +5,41 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: read
+
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'test/**'
+              - 'tests/**'
+              - '**/*.test.*'
+              - '**/*.spec.*'
+              - 'package.json'
+              - 'yarn.lock'
+              - '.yarnrc.yml'
+              - '.yarn/**'
+              - 'tsconfig.json'
+              - 'vite.config.*'
+              - 'vitest.config.*'
+              - 'jest.config.*'
+              - 'eslint.config.*'
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+
     runs-on: ubuntu-latest
 
     steps:
