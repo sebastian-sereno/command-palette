@@ -16,6 +16,7 @@ import type {
 export type CommandExecutionResult<T = unknown> = {
   success: boolean;
   commandId: string;
+  path: string[];
   value?: T;
   error?: unknown;
   cancelled?: boolean;
@@ -55,41 +56,51 @@ export class CommandExecutor {
    */
 
   async execute<TContext = unknown, T = unknown>(
-    id: string,
+    location: readonly string[] | string,
     context: TContext,
     signal?: AbortSignal,
   ): Promise<CommandExecutionResult<T>> {
-    const node = this.registry.getCommandByID(id);
+    const node = this.registry.getCommand(location);
+
+    const locationArr = Array.isArray(location) ? location : [location];
+    const commandId = locationArr.at(-1)!;
+    const path = locationArr.slice(0, -1);
 
     if (!node) {
       return {
-        commandId: id,
+        commandId,
         duration: 0,
-        error: new Error(`Command "${id}" was not found.`),
+        error: new Error(`Command "${commandId}" was not found.`),
+        path,
         success: false,
       };
     }
 
     if (isCommandTab(node as CommandNode)) {
       return {
-        commandId: id,
+        commandId,
         duration: 0,
-        error: new Error(`Cannot execute "${id}": it contains subcommands.`),
+        error: new Error(`Cannot execute "${commandId}": it contains subcommands.`),
+        path,
         success: false,
       };
     }
 
-    return this.executeResolved(id, node, context, signal);
+    return this.executeResolved(location, node, context, signal);
   }
 
   private async executeResolved<TContext, T = unknown>(
-    id: string,
+    location: readonly string[] | string,
     command: CommandNodeProxy,
     context: TContext,
     signal?: AbortSignal,
   ): Promise<CommandExecutionResult<T>> {
     const startedAt = new Date();
     const start = performance.now();
+
+    const locationArr = Array.isArray(location) ? location : [location];
+    const commandId = locationArr.at(-1)!;
+    const path = locationArr.slice(0, -1);
 
     const finish = (
       result: CommandExecutionResult<T>,
@@ -102,7 +113,8 @@ export class CommandExecutor {
         context: this.historyOptions.includeContext ? context : undefined,
         duration: result.duration,
         ...(error !== undefined ? { error } : {}),
-        id,
+        id: commandId,
+        path,
         startedAt,
         success: result.success,
       });
@@ -116,9 +128,10 @@ export class CommandExecutor {
       return finish(
         {
           cancelled: true,
-          commandId: id,
+          commandId,
           duration: performance.now() - start,
           error,
+          path,
           success: false,
         },
         error,
@@ -128,7 +141,7 @@ export class CommandExecutor {
     try {
       const commandNode = command as CommandNode;
       if (isCommandTab(commandNode))
-        throw new Error(`Cannot execute "${id}": it contains subcommands.`);
+        throw new Error(`Cannot execute "${command.id}": it contains subcommands.`);
 
       const value = (await commandNode.execute(context)) as T;
 
@@ -140,9 +153,10 @@ export class CommandExecutor {
         return finish(
           {
             cancelled: true,
-            commandId: id,
+            commandId: command.id,
             duration: performance.now() - start,
             error,
+            path,
             success: false,
           },
           error,
@@ -150,8 +164,9 @@ export class CommandExecutor {
       }
 
       return finish({
-        commandId: id,
+        commandId,
         duration: performance.now() - start,
+        path,
         success: true,
         value,
       });
@@ -161,34 +176,15 @@ export class CommandExecutor {
       return finish(
         {
           cancelled,
-          commandId: id,
+          commandId,
           duration: performance.now() - start,
           error,
+          path,
           success: false,
         },
         error,
       );
     }
-  }
-
-  /**
-   * Execute a command returned from the search system.
-   */
-  async executeCommand<TContext = unknown, T = unknown>(
-    command: CommandNodeProxy,
-    context: TContext,
-    signal?: AbortSignal,
-  ): Promise<CommandExecutionResult<T>> {
-    if (isCommandTab(command as CommandNode)) {
-      return {
-        commandId: command.id,
-        duration: 0,
-        error: new Error(`Cannot execute "${command.id}": it contains subcommands.`),
-        success: false,
-      };
-    }
-
-    return this.executeResolved(command.id, command, context, signal);
   }
 
   get history() {
@@ -223,7 +219,7 @@ export class CommandExecutor {
     const queryTokens = this.tokenize(normalizedQuery);
 
     return this.registry
-      .getAllCommands()
+      .getCurrentCommands()
       .map((command) => {
         const result = this.scoreCommand(command, normalizedQuery, queryTokens);
 

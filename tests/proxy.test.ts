@@ -19,7 +19,7 @@ describe('CommandProxy', () => {
   it('returns a command proxy', () => {
     const registry = new CommandRegistry();
     registry.registerCommand(createCommand());
-    const command = registry.getCommandByID('test');
+    const command = registry.getCommand('test');
 
     expect(command).toBeDefined();
     expect(command?.id).toBe('test');
@@ -29,7 +29,7 @@ describe('CommandProxy', () => {
   it('prevents property mutation', () => {
     const registry = new CommandRegistry();
     registry.registerCommand(createCommand());
-    const command = registry.getCommandByID('test')!;
+    const command = registry.getCommand('test')!;
 
     expect(() => {
       (command as any).title = 'Modified';
@@ -39,7 +39,7 @@ describe('CommandProxy', () => {
   it('prevents property deletion', () => {
     const registry = new CommandRegistry();
     registry.registerCommand(createCommand());
-    const command = registry.getCommandByID('test')!;
+    const command = registry.getCommand('test')!;
 
     expect(() => {
       delete (command as any).title;
@@ -50,7 +50,7 @@ describe('CommandProxy', () => {
     const registry = new CommandRegistry();
     registry.registerCommand({ ...createCommand(), execute: () => 'executed' });
 
-    const command = registry.getCommandByID('test', true)!;
+    const command = registry.getCommand('test', true)!;
     expect(command.execute({})).toBe('executed');
   });
 });
@@ -74,7 +74,7 @@ describe('CommandList', () => {
     registry.registerCommand(command('two'));
     registry.registerCommand(command('three'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     expect(commands.length).toBe(3);
   });
 
@@ -83,7 +83,7 @@ describe('CommandList', () => {
     registry.registerCommand(command('one'));
     registry.registerCommand(command('two'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     expect(commands[0]?.id).toBe('one');
     expect(commands[1]?.id).toBe('two');
   });
@@ -92,7 +92,7 @@ describe('CommandList', () => {
     const registry = new CommandRegistry();
     registry.registerCommand(command('one'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     expect(() => {
       (commands[0] as any).title = 'Modified';
     }).toThrow('CommandProxy is read-only.');
@@ -103,7 +103,7 @@ describe('CommandList', () => {
     registry.registerCommand(command('one'));
     registry.registerCommand(command('two'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     const ids = [...commands].map((command) => command.id);
     expect(ids).toEqual(['one', 'two']);
   });
@@ -113,7 +113,7 @@ describe('CommandList', () => {
     registry.registerCommand(command('one'));
     registry.registerCommand(command('two'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     const ids: string[] = [];
 
     for (const command of commands) {
@@ -128,7 +128,7 @@ describe('CommandList', () => {
     registry.registerCommand(command('one', 'One'));
     registry.registerCommand(command('two', 'Two'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     const titles = commands.map((command) => command.title);
     expect(titles).toEqual(['One', 'Two']);
   });
@@ -139,7 +139,7 @@ describe('CommandList', () => {
     registry.registerCommand(command('file-save'));
     registry.registerCommand(command('edit-copy'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     const fileCommands = commands.filter((command) => command.id.startsWith('file-'));
     expect(fileCommands.map((command) => command.id)).toEqual(['file-open', 'file-save']);
   });
@@ -148,7 +148,7 @@ describe('CommandList', () => {
     const registry = new CommandRegistry();
     registry.registerCommand(command('one'));
 
-    const commands = registry.getAllCommands();
+    const commands = registry.getCommands();
     expect(() => {
       (commands as any).push(command('two'));
     }).toThrow('CommandList is read-only.');
