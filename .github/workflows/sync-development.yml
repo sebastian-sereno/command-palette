@@ -29,7 +29,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: main
           fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
 
       - name: Configure Git
         run: |
@@ -37,13 +43,34 @@ jobs:
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Reset development to main
+      - name: Reset development and start dev.0
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
 
           git fetch origin main development
 
+          # Skip resetting development for patch releases.
+          if [[ "${RELEASE_TAG:-}" =~ -patch\. ]]; then
+            echo "Patch release detected; keeping development unchanged."
+            exit 0
+          fi
+
           git checkout -B development origin/main
 
-          git push --force-with-lease \
-            origin development:development
+          npm version prerelease \
+            --preid=dev \
+            --no-git-tag-version
+
+          VERSION=$(node -p "require('./package.json').version")
+
+          git add package.json
+          if [ -f package-lock.json ]; then
+            git add package-lock.json
+          fi
+
+          git commit -m "chore: reset development version to ${VERSION}"
+
+          git push --force-with-lease origin HEAD:development

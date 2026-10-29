@@ -1,51 +1,133 @@
-name: Bump Development Version After Release
+name: Bump Development Version
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - development
 
 permissions:
   contents: write
 
+concurrency:
+  group: bump-development-version
+  cancel-in-progress: false
+
 jobs:
   bump-development-version:
+    if: github.actor != 'github-actions[bot]'
+
     runs-on: ubuntu-latest
 
-    if: ${{ !github.event.release.prerelease }}
-
     steps:
-      - name: Checkout development branch
-        uses: actions/checkout@v6
+      - name: Checkout latest development branch
+        uses: actions/checkout@v5
         with:
           ref: development
+          fetch-depth: 0
+
+      - name: Check for meaningful code changes
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin development
+
+          # Handle new branch pushes.
+          if [[ "$BEFORE" =~ ^0+$ ]]; then
+            BEFORE=$(git rev-list --max-parents=0 "$AFTER" | tail -n 1)
+          fi
+
+          # Get commits included in this push.
+          COMMITS=$(git rev-list "$BEFORE..$AFTER")
+
+          CODE_CHANGE=false
+
+          while IFS= read -r COMMIT; do
+            [[ -z "$COMMIT" ]] && continue
+
+            MESSAGE=$(git log -1 --format=%s "$COMMIT")
+
+            # Only conventional commits that may affect code.
+            if ! [[ "$MESSAGE" =~ ^(feat|fix|perf|refactor)(\([^)]*\))?(!)?: ]]; then
+              echo "Ignoring commit: $MESSAGE"
+              continue
+            fi
+
+            # Ignore commits that only change non-code files.
+            FILES=$(git diff-tree \
+              --no-commit-id \
+              --name-only \
+              -r "$COMMIT")
+
+            while IFS= read -r FILE; do
+              [[ -z "$FILE" ]] && continue
+
+              case "$FILE" in
+                docs/*|*.md|.github/*|*.yml|*.yaml|LICENSE|.gitignore)
+                  continue
+                  ;;
+                package.json|package-lock.json)
+                  # Version and dependency metadata alone do not count.
+                  continue
+                  ;;
+                *)
+                  CODE_CHANGE=true
+                  break
+                  ;;
+              esac
+            done <<< "$FILES"
+
+            if [[ "$CODE_CHANGE" == "true" ]]; then
+              break
+            fi
+          done <<< "$COMMITS"
+
+          echo "code_change=$CODE_CHANGE" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        if: steps.changes.outputs.code_change == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: "22.x"
 
-      - name: Set next development version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - name: Configure Git
+        if: steps.changes.outputs.code_change == 'true'
         run: |
-          RELEASE_VERSION="${RELEASE_TAG#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Start from the version that was just released.
-          npm version "$RELEASE_VERSION" \
+      - name: Increment development version
+        if: steps.changes.outputs.code_change == 'true'
+        run: |
+          set -euo pipefail
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+
+          if [[ "$CURRENT_VERSION" =~ ^(.+)-dev\.([0-9]+)$ ]]; then
+            BASE_VERSION="${BASH_REMATCH[1]}"
+            DEV_NUMBER="${BASH_REMATCH[2]}"
+            NEXT_DEV_NUMBER=$((DEV_NUMBER + 1))
+          else
+            BASE_VERSION="$CURRENT_VERSION"
+            NEXT_DEV_NUMBER=0
+          fi
+
+          NEXT_VERSION="${BASE_VERSION}-dev.${NEXT_DEV_NUMBER}"
+
+          npm version "$NEXT_VERSION" \
             --no-git-tag-version \
             --allow-same-version
 
-          # Advance to the next patch's first development version.
-          npm version prerelease \
-            --preid=dev \
-            --no-git-tag-version
+          echo "Development version: ${NEXT_VERSION}"
 
-          echo "Development version: $(node -p "require('./package.json').version")"
-
-      - name: Commit and push to development
+      - name: Commit and push version
+        if: steps.changes.outputs.code_change == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+users.noreply.github.com"
+          set -euo pipefail
 
           git add package.json
 
@@ -54,7 +136,7 @@ jobs:
           fi
 
           if git diff --cached --quiet; then
-            echo "Development version is already up to date."
+            echo "No version changes to commit."
             exit 0
           fi
 
