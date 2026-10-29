@@ -43,32 +43,59 @@ export class CommandRegistry {
     return this.currentPath.length === 0;
   }
 
-  registerCommand(command: Command): void {
-    this.validateDetails(command);
+  registerCommand(node: CommandNode): void;
+  registerCommand(path: readonly string[], node: CommandNode): void;
+  registerCommand(nodeOrPath: CommandNode | readonly string[], other?: CommandNode): void {
+    const isSubCommand = Array.isArray(nodeOrPath);
+    const node = !isSubCommand ? (nodeOrPath as CommandNode) : (other as CommandNode);
 
-    if (this.commands.has(command.id))
-      throw new Error(`Command "${command.id}" is already registered.`);
-    if (typeof command.execute !== 'function')
-      throw new TypeError(`Command "${command.id}" needs an executor.`);
-    if (this.commands.has(command.id))
-      throw new Error(`Command with ID "${command.id}" is already registered.`);
+    // Check defaults
+    this.validateDetails(node);
+    if (isExecutableCommand(node)) {
+      // We need this to be a executable command
+      if (typeof node.execute !== 'function')
+        throw new TypeError(`Command "${node.id}" needs an executor.`);
+    } else {
+      // Otherwise this is a command tab
+      if (this.commands.has(node.id))
+        throw new Error(`Command "${node.id}" is already registered.`);
+    }
 
-    this.commands.set(command.id, command);
+    if (Array.isArray(nodeOrPath)) {
+      // This a subcommand
+      const parent = this.getNode(nodeOrPath satisfies string[]);
+
+      if (!parent || !isCommandTab(parent))
+        throw new Error(`Parent "${nodeOrPath.join(' ')}" is not a command tab.`);
+      if (parent.children.has(node.id))
+        throw new Error(`Subcommand "${node.id}" already exists under "${nodeOrPath.join(' ')}".`);
+
+      parent.children.set(node.id, node);
+    } else {
+      // This is a root command
+
+      if (this.commands.has(node.id))
+        throw new Error(`Command with ID "${node.id}" is already registered.`);
+
+      this.commands.set(node.id, node);
+    }
   }
 
-  registerCommandTab(commandTab: CommandTab): void {
-    this.validateDetails(commandTab);
+  unregisterCommand(path: string): boolean;
+  unregisterCommand(path: readonly string[]): boolean;
+  unregisterCommand(path: readonly string[] | string): boolean {
+    // We need the array to have values...
+    // Thankfully, this will also check the text length
+    if (path.length === 0) return false;
+    const target = Array.isArray(path) ? path.pop()! : path;
 
-    if (this.commands.has(commandTab.id))
-      throw new Error(`Command "${commandTab.id}" is already registered.`);
+    if (Array.isArray(path) && path.length !== 0) {
+      const parent = this.getNode(path);
+      if (!parent || isExecutableCommand(parent)) return false;
+      return parent.children.delete(target);
+    }
 
-    this.commands.set(commandTab.id, commandTab);
-  }
-
-  unregisterCommand(commandOrId: Command | string): boolean {
-    const id = typeof commandOrId === 'string' ? commandOrId : commandOrId?.id;
-    if (!id) return false;
-    return this.commands.delete(id);
+    return this.commands.delete(target);
   }
 
   replaceCommands(id: Command['id'], replacement: Command): boolean {
@@ -84,19 +111,42 @@ export class CommandRegistry {
     return true;
   }
 
-  getCommandByID(id: Command['id'], enforceCommand: true): CommandProxy | undefined;
-  getCommandByID(id: Command['id'], enforceCommand?: false): CommandNodeProxy | undefined;
-  getCommandByID(
-    id: Command['id'],
-    enforceCommand: boolean = false,
-  ): CommandProxy | CommandNodeProxy | undefined {
-    const node = this.commands.get(id);
-    if (!node || (isCommandTab(node) && enforceCommand)) return undefined;
-    return this.createCommandProxy(node);
+  getCommand(path: string, onlyCommand: true): CommandProxy | undefined;
+  getCommand(path: string, onlyCommand?: false): CommandNodeProxy | undefined;
+  getCommand(path: readonly string[], onlyCommand: true): CommandProxy | undefined;
+  getCommand(path: readonly string[], onlyCommand?: false): CommandNodeProxy | undefined;
+  getCommand(path: readonly string[] | string, onlyCommand: true): CommandProxy | undefined;
+  getCommand(path: readonly string[] | string, onlyCommand?: false): CommandNodeProxy | undefined;
+  getCommand(path: readonly string[] | string, onlyCommand?: boolean) {
+    if (path.length === 0) return undefined;
+    let command: CommandNode | undefined;
+
+    if (Array.isArray(path)) command = this.getNode(path);
+    else command = this.commands.get(path as string);
+
+    if (!command || (isCommandTab(command) && onlyCommand)) return undefined;
+    return this.createCommandProxy(command);
   }
 
-  getAllCommands(): CommandList {
-    const commands = Array.from(this.commands.values());
+  getCommandByPath(path: readonly string[]): CommandNodeProxy | undefined {
+    if (path.length === 0) return undefined;
+    const node = this.getNode(path);
+    if (!node || isCommandTab(node)) return undefined;
+    return this.createCommandProxy(node) as CommandNodeProxy;
+  }
+
+  getCommands(path?: never): CommandList;
+  getCommands(path: readonly string[]): CommandList;
+  getCommands(path?: readonly string[] | never) {
+    let commands: CommandNode[] = [];
+
+    if (path && Array.isArray(path) && path.length > 0) {
+      const parent = this.getNode(path);
+      if (parent && !isExecutableCommand(parent)) {
+        commands = Array.from(parent.children.values());
+      }
+    } else commands = Array.from(this.commands.values());
+
     return this.createCommandListProxy(commands);
   }
 
@@ -174,41 +224,6 @@ export class CommandRegistry {
         throw new TypeError('CommandProxy is read-only.');
       },
     });
-  }
-
-  registerSubcommand(parentPath: readonly string[], node: CommandNode): void {
-    this.validateDetails(node);
-    const parent = this.getNode(parentPath);
-
-    if (!parent || !isCommandTab(parent))
-      throw new Error(`Parent "${parentPath.join(' ')}" is not a command tab.`);
-    if (parent.children.has(node.id))
-      throw new Error(`Subcommand "${node.id}" already exists under "${parentPath.join(' ')}".`);
-    if (!isCommandTab(node) && typeof node.execute !== 'function')
-      throw new TypeError(`Command "${node.id}" needs an executor.`);
-
-    parent.children.set(node.id, node);
-  }
-
-  unregisterSubcommand(parentPath: readonly string[], subcommandId: string): boolean {
-    const parent = this.getNode(parentPath);
-    if (!parent || isExecutableCommand(parent)) return false;
-    return parent.children.delete(subcommandId);
-  }
-
-  getCommandByPath(path: readonly string[]): CommandNodeProxy | undefined {
-    if (path.length === 0) return undefined;
-    const node = this.getNode(path);
-    if (!node || isCommandTab(node)) return undefined;
-    return this.createCommandProxy(node) as CommandNodeProxy;
-  }
-
-  getSubcommands(parentPath: readonly string[]): CommandList {
-    const parent = this.getNode(parentPath);
-    if (!parent || isExecutableCommand(parent)) return this.createCommandListProxy([]);
-
-    const commands = Array.from(parent.children.values());
-    return this.createCommandListProxy(commands);
   }
 
   private getNode(path: readonly string[]): CommandNode | undefined {

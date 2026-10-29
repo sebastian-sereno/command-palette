@@ -21,7 +21,7 @@ describe('CommandRegistry', () => {
     const registry = new CommandRegistry();
     const command = createCommand({ id: 'hello' });
     registry.registerCommand(command);
-    const result = registry.getCommandByID('hello');
+    const result = registry.getCommand('hello');
     expect(result).toBeDefined();
     expect(result?.id).toBe('hello');
   });
@@ -32,7 +32,7 @@ describe('CommandRegistry', () => {
 
     expect(() => {
       registry.registerCommand(createCommand({ id: 'duplicate' }));
-    }).toThrow('Command "duplicate" is already registered.');
+    }).toThrow('Command with ID "duplicate" is already registered.');
   });
 
   it('unregisters by ID', () => {
@@ -40,15 +40,15 @@ describe('CommandRegistry', () => {
 
     registry.registerCommand(createCommand({ id: 'remove-me' }));
     expect(registry.unregisterCommand('remove-me')).toBe(true);
-    expect(registry.getCommandByID('remove-me')).toBeUndefined();
+    expect(registry.getCommand('remove-me')).toBeUndefined();
   });
 
   it('unregisters by command', () => {
     const registry = new CommandRegistry();
     const command = createCommand({ id: 'remove-me' });
     registry.registerCommand(command);
-    expect(registry.unregisterCommand(command)).toBe(true);
-    expect(registry.getCommandByID('remove-me')).toBeUndefined();
+    expect(registry.unregisterCommand(command.id)).toBe(true);
+    expect(registry.getCommand('remove-me')).toBeUndefined();
   });
 
   it('returns false when unregistering a missing command', () => {
@@ -63,7 +63,7 @@ describe('CommandRegistry', () => {
     const replacement = createCommand({ id: 'replace', title: 'Replacement' });
 
     expect(registry.replaceCommands('replace', replacement)).toBe(true);
-    expect(registry.getCommandByID('replace')?.title).toBe('Replacement');
+    expect(registry.getCommand('replace')?.title).toBe('Replacement');
   });
 
   it('does not replace a missing command', () => {
