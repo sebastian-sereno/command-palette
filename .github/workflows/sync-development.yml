@@ -26,7 +26,11 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' &&
-       github.event.pull_request.merged == true) ||
+       github.event.pull_request.merged == true &&
+       !startsWith(github.event.pull_request.title, 'ci:') &&
+       !startsWith(github.event.pull_request.title, 'chore:') &&
+       !startsWith(github.event.pull_request.title, 'ci(') &&
+       !startsWith(github.event.pull_request.title, 'chore(')) ||
       github.event_name == 'release'
 
     runs-on: ubuntu-latest
