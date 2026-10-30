@@ -121,7 +121,11 @@ export class CommandRegistry {
     if (path.length === 0) return undefined;
     let command: CommandNode | undefined;
 
+    const parent = this.getNode(this.currentPath);
+
     if (Array.isArray(path)) command = this.getNode(path);
+    else if (parent && !isCommandTab(parent)) return undefined;
+    else if (parent) command = parent.children.get(path as string);
     else command = this.commands.get(path as string);
 
     if (!command || (isCommandTab(command) && onlyCommand)) return undefined;
