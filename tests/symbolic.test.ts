@@ -314,4 +314,49 @@ describe('Symbolic command registration', () => {
     expect(results.filter((result) => result.command.id === 'build')).toHaveLength(1);
     expect(results[0]?.symbolic).toBeUndefined();
   });
+
+  describe('Symbolic child group isolation', () => {
+    it('does not load child symbolic commands until entering the child', () => {
+      const build = createCommand('build');
+      const react = createGroup('react', new Map([['build', build]]));
+      const frontend = createGroup('frontend', new Map([['react', react]]));
+
+      registry.registerCommand(frontend);
+      registry.registerSymbolicCommands(['frontend']);
+
+      const executor = new CommandExecutor(registry);
+      expect(registry.enterCommand('frontend')).toBe(true);
+
+      const frontendResults = executor.searchCommands('build');
+      expect(frontendResults).toHaveLength(1);
+      expect(frontendResults[0]?.symbolic).toBe(true);
+
+      registry.goToRoot();
+
+      const rootResults = executor.searchCommands('build');
+      expect(rootResults).toHaveLength(0);
+
+      expect(registry.enterCommand('frontend')).toBe(true);
+      expect(registry.enterCommand('react')).toBe(true);
+
+      const reactResults = executor.searchCommands('build');
+      expect(reactResults.some((result) => result.command.id === 'build')).toBe(true);
+    });
+  });
+
+  it('does not load an explicitly opted-out child', () => {
+    const build = createCommand('build');
+    const react = createGroup('react', new Map([['build', build]]), false);
+    const frontend = createGroup('frontend', new Map([['react', react]]));
+
+    registry.registerCommand(frontend);
+    registry.registerSymbolicCommands(['frontend']);
+    registry.enterCommand('frontend');
+
+    const executor = new CommandExecutor(registry);
+    expect(executor.searchCommands('build')).toHaveLength(0);
+
+    registry.enterCommand('react');
+    expect(executor.searchCommands('build')).toHaveLength(1);
+  });
 });

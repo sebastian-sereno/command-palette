@@ -220,6 +220,7 @@ export class CommandExecutor {
 
     // 1. Search normal commands.
     for (const command of this.registry.getCurrentCommands()) {
+      if (isCommandTab(command as CommandNode)) continue;
       const result = this.scoreCommand(command, normalizedQuery, queryTokens);
 
       if (result.score >= threshold) {

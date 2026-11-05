@@ -334,39 +334,30 @@ export class CommandRegistry {
     groupPath: readonly string[],
     options: SymbolicRegistrationOptions = {},
   ): void {
+    if (group.symbolic === false) return;
     const recursive = options.recursive ?? true;
-
     const includeDirectCommands = options.includeDirectCommands ?? true;
 
     const children = Array.from(group.children.values());
 
-    // First traverse descendants.
+    // Register child groups first.
     for (const child of children) {
       if (!isCommandTab(child)) continue;
-      const childPath = [...groupPath, child.id];
-
-      // Explicit opt-out prevents registration
-      // in this subtree.
       if (child.symbolic === false) continue;
-
-      this.registerSymbolicRecursive(child, childPath, {
-        includeDirectCommands,
-        recursive,
-      });
+      this.registerSymbolicRecursive(child, [...groupPath, child.id], options);
     }
 
-    // Then register direct executable commands.
     if (!includeDirectCommands) return;
 
+    // Register direct executable commands.
     for (const child of children) {
       if (!isExecutableCommand(child)) continue;
-      const sourcePath = [...groupPath, child.id];
-      this.registerSymbolic(child, sourcePath, groupPath);
+      this.registerSymbolic(child, [...groupPath, child.id], groupPath);
     }
 
-    // Finally expose descendant commands in this group.
     if (!recursive) return;
 
+    // Expose descendant commands in the current group.
     for (const child of children) {
       if (!isCommandTab(child)) continue;
       if (child.symbolic === false) continue;
@@ -379,6 +370,8 @@ export class CommandRegistry {
     groupPath: readonly string[],
     targetPath: readonly string[],
   ): void {
+    if (group.symbolic === false) return;
+
     for (const child of group.children.values()) {
       if (isExecutableCommand(child)) {
         this.registerSymbolic(child, [...groupPath, child.id], targetPath);
