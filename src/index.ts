@@ -5,3 +5,8 @@ export { DEFAULT_HISTORY_OPTIONS } from './history.js';
 export type { CommandList, CommandNodeProxy, CommandProxy } from './proxy.js';
 export { CommandRegistry } from './registry.js';
 export type { CommandSearch, CommandSearchOptions, CommandSearchResult } from './search.js';
+export type {
+  SymbolicCommand,
+  SymbolicCommandAdapter,
+  SymbolicRegistrationOptions,
+} from './symbolic.js';

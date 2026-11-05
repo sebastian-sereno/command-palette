@@ -6,10 +6,20 @@ import {
   isExecutableCommand,
 } from './command.js';
 import type { CommandList, CommandNodeProxy, CommandProxy } from './proxy.js';
+import {
+  DefaultSymbolicCommandAdapter,
+  type SymbolicCommand,
+  type SymbolicCommandAdapter,
+  type SymbolicRegistrationOptions,
+} from './symbolic.js';
 
 export class CommandRegistry {
   private readonly commands = new Map<string, CommandNode>();
   private currentPath: string[] = [];
+
+  private readonly registeredSymbolicIds = new Set<string>();
+  private readonly symbolicRegistrations = new Map<string, SymbolicCommand>();
+  private symbolicAdapter: SymbolicCommandAdapter = new DefaultSymbolicCommandAdapter();
 
   getCurrentPath(): readonly string[] {
     return [...this.currentPath];
@@ -26,12 +36,19 @@ export class CommandRegistry {
     const node = currentCommands.find((command) => command.id === id);
     if (!node || !isCommandTab(node)) return false;
     this.currentPath = [...this.currentPath, id];
+
+    if (node.symbolic !== false)
+      this.registerSymbolicCommands(this.currentPath, {
+        includeDirectCommands: true,
+        recursive: true,
+      });
+
     return true;
   }
 
   goBack(): boolean {
     if (this.currentPath.length === 0) return false;
-    this.currentPath = this.currentPath.slice(0, -1);
+    this.currentPath.pop();
     return true;
   }
 
@@ -240,5 +257,148 @@ export class CommandRegistry {
     }
 
     return node;
+  }
+
+  setSymbolicAdapter(adapter: SymbolicCommandAdapter): void {
+    this.symbolicAdapter = adapter;
+  }
+
+  getSymbolicCommands(parentPath: readonly string[] = this.currentPath): SymbolicCommand[] {
+    const adapter = this.symbolicAdapter;
+
+    if (adapter instanceof DefaultSymbolicCommandAdapter)
+      return adapter.getSymbolicCommands(parentPath);
+
+    return [];
+  }
+
+  private createHash(source: string): string {
+    let hash = 0;
+
+    for (let i = 0; i < source.length; i++) {
+      hash = (hash * 31 + source.charCodeAt(i)) | 0;
+    }
+
+    // Convert to unsigned to avoid negative hashes.
+    return (hash >>> 0).toString(36);
+  }
+
+  private createSymbolicId(
+    commandId: string,
+    sourcePath: readonly string[],
+    targetPath: readonly string[],
+  ): string {
+    const source = [...targetPath, ...sourcePath, commandId].join('/');
+    return `sym_${this.createHash(source)}`;
+  }
+
+  // private createCommandId(commandId: string, parentPath: readonly string[]): string {
+  //   const source = [...parentPath, commandId].join('/');
+  //   return `cmd_${this.createSymbolicId(commandId, parentPath).slice(4)}`;
+  // }
+
+  private createSymbolicCommand(
+    command: Command,
+    sourcePath: readonly string[],
+    targetPath: readonly string[],
+  ): SymbolicCommand {
+    return {
+      category: [...command.category],
+      description: sourcePath.join('/'),
+      id: this.createSymbolicId(command.id, sourcePath, targetPath),
+      keywords: [...command.keywords],
+      parentPath: [...targetPath],
+      sourceId: command.id,
+      sourcePath: [...sourcePath],
+      title: command.title,
+    };
+  }
+
+  private registerSymbolic(
+    command: Command,
+    sourcePath: readonly string[],
+    parentPath: readonly string[],
+  ): void {
+    if (!this.symbolicAdapter) return;
+
+    const symbolic = this.createSymbolicCommand(command, sourcePath, parentPath);
+    if (this.registeredSymbolicIds.has(symbolic.id)) return;
+
+    this.symbolicAdapter.registerSymbolicCommand(symbolic);
+    this.symbolicRegistrations.set(symbolic.id, symbolic);
+    this.registeredSymbolicIds.add(symbolic.id);
+  }
+
+  private registerSymbolicRecursive(
+    group: CommandTab,
+    groupPath: readonly string[],
+    options: SymbolicRegistrationOptions = {},
+  ): void {
+    const recursive = options.recursive ?? true;
+
+    const includeDirectCommands = options.includeDirectCommands ?? true;
+
+    const children = Array.from(group.children.values());
+
+    // First traverse descendants.
+    for (const child of children) {
+      if (!isCommandTab(child)) continue;
+      const childPath = [...groupPath, child.id];
+
+      // Explicit opt-out prevents registration
+      // in this subtree.
+      if (child.symbolic === false) continue;
+
+      this.registerSymbolicRecursive(child, childPath, {
+        includeDirectCommands,
+        recursive,
+      });
+    }
+
+    // Then register direct executable commands.
+    if (!includeDirectCommands) return;
+
+    for (const child of children) {
+      if (!isExecutableCommand(child)) continue;
+      const sourcePath = [...groupPath, child.id];
+      this.registerSymbolic(child, sourcePath, groupPath);
+    }
+
+    // Finally expose descendant commands in this group.
+    if (!recursive) return;
+
+    for (const child of children) {
+      if (!isCommandTab(child)) continue;
+      if (child.symbolic === false) continue;
+      this.registerDescendantSymbols(child, [...groupPath, child.id], groupPath);
+    }
+  }
+
+  private registerDescendantSymbols(
+    group: CommandTab,
+    groupPath: readonly string[],
+    targetPath: readonly string[],
+  ): void {
+    for (const child of group.children.values()) {
+      if (isExecutableCommand(child)) {
+        this.registerSymbolic(child, [...groupPath, child.id], targetPath);
+        continue;
+      }
+
+      if (child.symbolic === false) continue;
+      this.registerDescendantSymbols(child, [...groupPath, child.id], targetPath);
+    }
+  }
+
+  registerSymbolicCommands(
+    path: readonly string[],
+    options: SymbolicRegistrationOptions = {},
+  ): void {
+    const group = this.getNode(path);
+
+    if (!group || !isCommandTab(group))
+      throw new Error(`Command group "${path.join('/')}" was not found.`);
+
+    this.registerSymbolicRecursive(group, path, options);
   }
 }
