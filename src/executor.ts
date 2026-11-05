@@ -212,26 +212,52 @@ export class CommandExecutor {
    */
   searchCommands(query: string, options: CommandSearchOptions = {}): CommandSearchResult[] {
     const { limit = 20, threshold = 0 } = options;
-
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return [];
 
     const queryTokens = this.tokenize(normalizedQuery);
+    const results: CommandSearchResult[] = [];
 
-    return this.registry
-      .getCurrentCommands()
-      .map((command) => {
-        const result = this.scoreCommand(command, normalizedQuery, queryTokens);
+    // 1. Search normal commands.
+    for (const command of this.registry.getCurrentCommands()) {
+      const result = this.scoreCommand(command, normalizedQuery, queryTokens);
 
-        return {
-          command,
+      if (result.score >= threshold) {
+        results.push({
+          command: command as CommandNodeProxy,
           matches: result.matches,
           score: result.score,
-        };
-      })
-      .filter((result) => result.score >= threshold)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+        });
+      }
+    }
+
+    // 2. Search symbolic commands belonging to the current group.
+    const currentPath = this.registry.getCurrentPath();
+    const symbolicCommands = this.registry.getSymbolicCommands(currentPath);
+
+    for (const symbolic of symbolicCommands) {
+      // Resolve the symbolic reference to the original command.
+      const command = this.registry.getCommandByPath(symbolic.sourcePath);
+      if (!command) continue;
+
+      // Don't show a direct command twice.
+      const isDirectCommand = symbolic.sourcePath.length === currentPath.length + 1;
+      if (isDirectCommand) continue;
+
+      const result = this.scoreCommand(command, normalizedQuery, queryTokens, symbolic.description);
+      if (result.score < threshold) continue;
+
+      results.push({
+        command,
+        matches: [...result.matches, 'symbolic'],
+        score: result.score,
+        sourcePath: [...symbolic.sourcePath],
+        symbolic: true,
+      });
+    }
+
+    // 3. Sort and limit combined results.
+    return results.sort((a, b) => b.score - a.score).slice(0, limit);
   }
 
   private createSearchProxy(queryParts: string[] = []): CommandSearch {
@@ -281,6 +307,7 @@ export class CommandExecutor {
     command: CommandNodeProxy,
     query: string,
     tokens: string[],
+    descriptionOverride?: string,
   ): {
     score: number;
     matches: string[];
@@ -290,7 +317,7 @@ export class CommandExecutor {
 
     const id = command.id.toLowerCase();
     const title = command.title.toLowerCase();
-    const description = command.description.toLowerCase();
+    const description = (descriptionOverride ?? command.description).toLowerCase();
 
     const queryReg = new RegExp(
       `^${query.replaceAll(/(?=[+?|(){}[\].])/g, '\\').replaceAll(/(?=\*)/g, '.')}$`,
