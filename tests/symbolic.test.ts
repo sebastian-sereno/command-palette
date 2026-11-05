@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Command, CommandTab } from '../src/command.js';
+import { CommandExecutor } from '../src/executor.js';
 import { CommandRegistry } from '../src/registry.js';
 import { DefaultSymbolicCommandAdapter } from '../src/symbolic.js';
 
@@ -261,5 +262,56 @@ describe('Symbolic command registration', () => {
 
       expect(adapter.getSymbolicCommands()[0]?.keywords).toEqual(['build']);
     });
+  });
+
+  describe('Symbolic command search', () => {
+    it('finds commands from descendant groups', () => {
+      const build = createCommand('build');
+      const react = createGroup('react', new Map([['build', build]]));
+      const frontend = createGroup('frontend', new Map([['react', react]]));
+
+      registry.registerCommand(frontend);
+      registry.registerSymbolicCommands(['frontend']);
+
+      // Navigate into the group containing symbolic registrations.
+      expect(registry.enterCommand('frontend')).toBe(true);
+
+      const executor = new CommandExecutor(registry);
+      const results = executor.searchCommands('build');
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.symbolic).toBe(true);
+      expect(results[0]?.sourcePath).toEqual(['frontend', 'react', 'build']);
+    });
+
+    it('resolves symbolic results to original commands', () => {
+      const build = createCommand('build');
+      const react = createGroup('react', new Map([['build', build]]));
+      const frontend = createGroup('frontend', new Map([['react', react]]));
+
+      registry.registerCommand(frontend);
+      registry.registerSymbolicCommands(['frontend']);
+      registry.enterCommand('frontend');
+
+      const executor = new CommandExecutor(registry);
+      const result = executor.search.build.find();
+
+      expect(result?.id).toBe('build');
+    });
+  });
+
+  it('does not return duplicate direct commands', () => {
+    const build = createCommand('build');
+    const frontend = createGroup('frontend', new Map([['build', build]]));
+
+    registry.registerCommand(frontend);
+    registry.registerSymbolicCommands(['frontend']);
+    registry.enterCommand('frontend');
+
+    const executor = new CommandExecutor(registry);
+    const results = executor.searchCommands('build');
+
+    expect(results.filter((result) => result.command.id === 'build')).toHaveLength(1);
+    expect(results[0]?.symbolic).toBeUndefined();
   });
 });

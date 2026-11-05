@@ -13,6 +13,8 @@ export type CommandSearchResult = {
   command: CommandNodeProxy;
   score: number;
   matches: string[];
+  symbolic?: boolean;
+  sourcePath?: string[];
 };
 
 export type CommandSearchOptions = {
