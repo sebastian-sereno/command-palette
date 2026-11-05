@@ -220,7 +220,6 @@ export class CommandExecutor {
 
     // 1. Search normal commands.
     for (const command of this.registry.getCurrentCommands()) {
-      if (isCommandTab(command as CommandNode)) continue;
       const result = this.scoreCommand(command, normalizedQuery, queryTokens);
 
       if (result.score >= threshold) {
@@ -237,9 +236,16 @@ export class CommandExecutor {
     const symbolicCommands = this.registry.getSymbolicCommands(currentPath);
 
     for (const symbolic of symbolicCommands) {
+      // Only show symbols registered for the currently open group.
+      if (
+        symbolic.parentPath.length !== currentPath.length ||
+        !symbolic.parentPath.every((part, index) => part === currentPath[index])
+      )
+        continue;
+
       // Resolve the symbolic reference to the original command.
       const command = this.registry.getCommandByPath(symbolic.sourcePath);
-      if (!command) continue;
+      if (!command || isCommandTab(command as CommandNode)) continue;
 
       // Don't show a direct command twice.
       const isDirectCommand = symbolic.sourcePath.length === currentPath.length + 1;

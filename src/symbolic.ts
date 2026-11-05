@@ -17,6 +17,7 @@ export type SymbolicRegistrationOptions = {
 export type SymbolicCommandAdapter = {
   registerSymbolicCommand(command: SymbolicCommand): void;
   unregisterSymbolicCommand?(id: string): void;
+  getSymbolicCommands(parentPath?: readonly string[]): SymbolicCommand[];
 };
 
 /**
