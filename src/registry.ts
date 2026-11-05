@@ -265,11 +265,7 @@ export class CommandRegistry {
 
   getSymbolicCommands(parentPath: readonly string[] = this.currentPath): SymbolicCommand[] {
     const adapter = this.symbolicAdapter;
-
-    if (adapter instanceof DefaultSymbolicCommandAdapter)
-      return adapter.getSymbolicCommands(parentPath);
-
-    return [];
+    return adapter.getSymbolicCommands(parentPath);
   }
 
   private createHash(source: string): string {

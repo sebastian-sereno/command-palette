@@ -328,35 +328,52 @@ describe('Symbolic command registration', () => {
       expect(registry.enterCommand('frontend')).toBe(true);
 
       const frontendResults = executor.searchCommands('build');
-      expect(frontendResults).toHaveLength(1);
+      expect(frontendResults).toHaveLength(2);
       expect(frontendResults[0]?.symbolic).toBe(true);
 
       registry.goToRoot();
 
       const rootResults = executor.searchCommands('build');
-      expect(rootResults).toHaveLength(0);
+      expect(rootResults).toHaveLength(1);
 
+      // Child group remains available for navigation.
       expect(registry.enterCommand('frontend')).toBe(true);
+
+      const groups = registry.getCurrentCommands();
+      expect(groups.some((command) => command.id === 'react')).toBe(true);
       expect(registry.enterCommand('react')).toBe(true);
 
       const reactResults = executor.searchCommands('build');
-      expect(reactResults.some((result) => result.command.id === 'build')).toBe(true);
+
+      expect(reactResults).toHaveLength(1);
+      expect(reactResults[0]?.symbolic).toBeUndefined();
     });
-  });
 
-  it('does not load an explicitly opted-out child', () => {
-    const build = createCommand('build');
-    const react = createGroup('react', new Map([['build', build]]), false);
-    const frontend = createGroup('frontend', new Map([['react', react]]));
+    it('does not load an explicitly opted-out child', () => {
+      const build = createCommand('build');
+      const react = createGroup('react', new Map([['build', build]]), false);
+      const frontend = createGroup('frontend', new Map([['react', react]]));
 
-    registry.registerCommand(frontend);
-    registry.registerSymbolicCommands(['frontend']);
-    registry.enterCommand('frontend');
+      registry.registerCommand(frontend);
+      registry.registerSymbolicCommands(['frontend']);
 
-    const executor = new CommandExecutor(registry);
-    expect(executor.searchCommands('build')).toHaveLength(0);
+      const executor = new CommandExecutor(registry);
+      expect(registry.enterCommand('frontend')).toBe(true);
 
-    registry.enterCommand('react');
-    expect(executor.searchCommands('build')).toHaveLength(1);
+      // React must remain visible as a navigation group.
+      const frontendCommands = registry.getCurrentCommands();
+      expect(frontendCommands.some((command) => command.id === 'react')).toBe(true);
+
+      // But its descendants must not be symbolically exposed.
+      expect(executor.searchCommands('build')).toHaveLength(1);
+      expect(registry.enterCommand('react')).toBe(true);
+
+      // Its direct executable commands remain available.
+      const reactResults = executor.searchCommands('build');
+
+      expect(reactResults).toHaveLength(1);
+      expect(reactResults[0]?.command.id).toBe('build');
+      expect(reactResults[0]?.symbolic).toBeUndefined();
+    });
   });
 });
