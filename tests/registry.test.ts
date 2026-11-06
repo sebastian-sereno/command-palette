@@ -62,13 +62,13 @@ describe('CommandRegistry', () => {
     registry.registerCommand(createCommand({ id: 'replace', title: 'Original' }));
     const replacement = createCommand({ id: 'replace', title: 'Replacement' });
 
-    expect(registry.replaceCommands('replace', replacement)).toBe(true);
+    expect(registry.replaceCommand('replace', replacement)).toBe(true);
     expect(registry.getCommand('replace')?.title).toBe('Replacement');
   });
 
   it('does not replace a missing command', () => {
     const registry = new CommandRegistry();
-    expect(registry.replaceCommands('missing', createCommand({ id: 'missing' }))).toBe(false);
+    expect(registry.replaceCommand('missing', createCommand({ id: 'missing' }))).toBe(false);
   });
 
   it('rejects mismatched replacement IDs', () => {
@@ -76,7 +76,7 @@ describe('CommandRegistry', () => {
     registry.registerCommand(createCommand({ id: 'original' }));
 
     expect(() => {
-      registry.replaceCommands('original', createCommand({ id: 'different' }));
+      registry.replaceCommand('original', createCommand({ id: 'different' }));
     }).toThrow('Replacement command ID "different" does not match "original".');
   });
 });

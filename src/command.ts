@@ -1,3 +1,10 @@
+export enum CommandVisibility {
+  ALWAYS = 'ALWAYS',
+  SHOWN = 'SHOWN',
+  SEARCHABLE = 'SEARCHABLE',
+  HIDDEN = 'HIDDEN',
+}
+
 export type Command<TContext = unknown> = {
   shortcut: string;
   execute: (context: TContext) => unknown | Promise<unknown>;
@@ -9,6 +16,7 @@ export type CommandDetails = {
   description: string;
   keywords: string[];
   category: string[];
+  visibility?: CommandVisibility;
   extras?: Record<string, unknown>;
 };
 
