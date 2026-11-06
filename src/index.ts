@@ -1,4 +1,10 @@
-export type { Command, CommandDetails, CommandNode, CommandTab } from './command.js';
+export type {
+  Command,
+  CommandDetails,
+  CommandNode,
+  CommandTab,
+  CommandVisibility,
+} from './command.js';
 export { CommandExecutionContext, CommandExecutionResult, CommandExecutor } from './executor.js';
 export type { CommandHistoryEntry, CommandHistoryOptions } from './history.js';
 export { DEFAULT_HISTORY_OPTIONS } from './history.js';

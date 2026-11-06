@@ -2,6 +2,7 @@ import {
   type Command,
   type CommandNode,
   type CommandTab,
+  CommandVisibility,
   isCommandTab,
   isExecutableCommand,
 } from './command.js';
@@ -25,16 +26,17 @@ export class CommandRegistry {
     return [...this.currentPath];
   }
 
-  getCurrentCommands(): CommandNode[] {
+  getCurrentCommands(): CommandList {
     if (this.currentPath.length === 0) return [...this.commands.values()];
     const current = this.getNode(this.currentPath);
-    return current && isCommandTab(current) ? [...current.children.values()] : [];
+    const commands = current && isCommandTab(current) ? [...current.children.values()] : [];
+    return this.createCommandListProxy(commands);
   }
 
   enterCommand(id: string): boolean {
     const currentCommands = this.getCurrentCommands();
     const node = currentCommands.find((command) => command.id === id);
-    if (!node || !isCommandTab(node)) return false;
+    if (!node || !('children' in node)) return false;
     this.currentPath = [...this.currentPath, id];
 
     if (node.symbolic !== false)
@@ -115,7 +117,7 @@ export class CommandRegistry {
     return this.commands.delete(target);
   }
 
-  replaceCommands(id: Command['id'], replacement: Command): boolean {
+  replaceCommand(id: Command['id'], replacement: Command): boolean {
     if (!this.commands.has(id)) return false;
 
     if (!replacement || typeof replacement !== 'object')

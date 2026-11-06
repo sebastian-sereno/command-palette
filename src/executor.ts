@@ -1,4 +1,4 @@
-import { type CommandNode, isCommandTab } from './command.js';
+import { type CommandNode, CommandVisibility, isCommandTab } from './command.js';
 import {
   type CommandHistoryEntry,
   type CommandHistoryOptions,
@@ -220,6 +220,11 @@ export class CommandExecutor {
 
     // 1. Search normal commands.
     for (const command of this.registry.getCurrentCommands()) {
+      const visibility = this.getVisibility(command);
+
+      if (visibility !== CommandVisibility.ALWAYS)
+        if (visibility !== CommandVisibility.SEARCHABLE) continue;
+
       const result = this.scoreCommand(command, normalizedQuery, queryTokens);
 
       if (result.score >= threshold) {
@@ -236,18 +241,19 @@ export class CommandExecutor {
     const symbolicCommands = this.registry.getSymbolicCommands(currentPath);
 
     for (const symbolic of symbolicCommands) {
-      // Only show symbols registered for the currently open group.
       if (
         symbolic.parentPath.length !== currentPath.length ||
         !symbolic.parentPath.every((part, index) => part === currentPath[index])
       )
         continue;
 
-      // Resolve the symbolic reference to the original command.
       const command = this.registry.getCommandByPath(symbolic.sourcePath);
       if (!command || isCommandTab(command as CommandNode)) continue;
 
-      // Don't show a direct command twice.
+      const visibility = this.getVisibility(command);
+      if (visibility !== CommandVisibility.ALWAYS)
+        if (visibility !== CommandVisibility.SEARCHABLE) continue;
+
       const isDirectCommand = symbolic.sourcePath.length === currentPath.length + 1;
       if (isDirectCommand) continue;
 
@@ -265,6 +271,10 @@ export class CommandExecutor {
 
     // 3. Sort and limit combined results.
     return results.sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+
+  private getVisibility(command: CommandNodeProxy): CommandVisibility {
+    return command.visibility ?? CommandVisibility.ALWAYS;
   }
 
   private createSearchProxy(queryParts: string[] = []): CommandSearch {
